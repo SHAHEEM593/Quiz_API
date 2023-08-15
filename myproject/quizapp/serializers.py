@@ -62,6 +62,25 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ['id', 'name']
+class ChoiceViewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Choice
+        fields = ['id', 'content']
+
+class QuestionViewSerializer(serializers.ModelSerializer):
+    choices = ChoiceViewSerializer(many=True)
+
+    class Meta:
+        model = Question
+        fields = ['id', 'content', 'choices']
+
+class QuizViewSerializer(serializers.ModelSerializer):
+    questions = QuestionViewSerializer(many=True)
+
+    class Meta:
+        model = Quiz
+        fields = ['id', 'title', 'created_at', 'category', 'questions']
+
 
 class QuizSerializer(serializers.ModelSerializer):
     questions = QuestionSerializer(many=True)
@@ -88,51 +107,48 @@ class SelectedChoiceSerializer(serializers.ModelSerializer):
         model = SelectedChoice
         fields = ['question', 'choice']
 
+
 class QuizAttemptSerializer(serializers.ModelSerializer):
     selected_choices = SelectedChoiceSerializer(many=True, write_only=True)
 
     class Meta:
         model = QuizAttempt
-        fields = ['id', 'user', 'quiz', 'date_attempted', 'selected_choices']
+        fields = ['id', 'quiz', 'date_attempted', 'selected_choices']
 
     def create(self, validated_data):
         selected_choices_data = validated_data.pop('selected_choices', [])
         score = 0
 
-        quiz_attempt = QuizAttempt(**validated_data)
+        user = self.context['request'].user
 
         for selected_choice_data in selected_choices_data:
             question_id = selected_choice_data['question']
-            choice_data = selected_choice_data.get('choice') 
+            choice_data = selected_choice_data['choice']
+
             if not choice_data:
                 raise serializers.ValidationError("Choice data not provided.")
 
-            choice_id = choice_data.get('id')
+            choice_id = choice_data.id
 
             if not choice_id:
                 raise serializers.ValidationError("Choice ID not provided.")
 
             try:
-                question = Question.objects.get(pk=question_id)
-                choice = Choice.objects.get(pk=choice_id)
+                selected_choice = SelectedChoice.objects.get(
+                    question_id=question_id, choice_id=choice_id
+                )
+                if selected_choice.choice.is_correct:
+                    score += 1
             except ObjectDoesNotExist:
-                raise serializers.ValidationError("Question or Choice does not exist.")
+                pass
 
-            selected_choice = SelectedChoice.objects.create(
-                quiz_attempt=quiz_attempt, 
-                question=question,
-                choice=choice
-            )
+        validated_data['score'] = score
+        
+        validated_data['user'] = user
 
-            if selected_choice.choice.is_correct:
-                score += 1
-
-        quiz_attempt.score = score
-
-        quiz_attempt.save()
+        quiz_attempt = QuizAttempt.objects.create(**validated_data)
 
         return quiz_attempt
-
 
 class QuizAnalyticsSerializer(serializers.Serializer):
     total_quizzes = serializers.IntegerField()
@@ -192,3 +208,14 @@ class CombinedStatisticsSerializer(serializers.Serializer):
     quiz_performance_metrics = serializers.ListField(child=serializers.DictField())
     question_statistics = serializers.ListField(child=serializers.DictField())
 
+from django_filters import rest_framework as filters
+from .models import Quiz
+
+class QuizFilter(filters.FilterSet):
+    topic = filters.CharFilter(field_name='category__name', lookup_expr='icontains')
+    difficulty_level = filters.CharFilter(field_name='difficulty_level', lookup_expr='iexact')
+    created_at = filters.DateFilter(field_name='created_at', lookup_expr='date')
+
+    class Meta:
+        model = Quiz
+        fields = ['topic', 'difficulty_level', 'created_at']

@@ -8,6 +8,9 @@ from rest_framework.generics import ListAPIView
 from rest_framework import serializers
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView,ListAPIView,RetrieveAPIView
 from django.core.exceptions import ObjectDoesNotExist
+from .serializers import QuizViewSerializer
+from .filters import QuizFilter
+from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Avg, Max, Min, Count
 from .serializers import (
     UserRegistrationSerializer,
@@ -21,7 +24,6 @@ from .serializers import (
     UserProfileSerializer,
     CombinedStatisticsSerializer,
 )
-
 
 class UserListView(ListAPIView):
     queryset = User.objects.all()
@@ -60,45 +62,27 @@ class LoginView(generics.CreateAPIView):
 class QuizListCreateView(generics.ListCreateAPIView):
     queryset = Quiz.objects.all()
     serializer_class = QuizSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+class QuizListView(generics.ListAPIView):
+    queryset = Quiz.objects.all()
+    serializer_class = QuizViewSerializer
+    filterset_class = QuizFilter
+    filter_backends = [DjangoFilterBackend]
+    permission_classes = [permissions.IsAuthenticated]
+    
+
 
 class QuizRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Quiz.objects.all()
     serializer_class = QuizSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
 
 class QuizAttemptCreateView(generics.CreateAPIView):
     serializer_class = QuizAttemptSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        serializer.validated_data['user'] = request.user
-
-        try:
-            selected_choices = serializer.validated_data.get('selected_choices', [])
-            score = 0
-            for selected_choice_data in selected_choices:
-                question_id = selected_choice_data.get('question')
-                choice_data = selected_choice_data.get('choice')
-                choice_id = choice_data.get('id')
-
-                try:
-                    selected_choice = SelectedChoice.objects.get(question_id=question_id, choice_id=choice_id)
-                    if selected_choice.choice.is_correct:
-                        score += 1
-                except ObjectDoesNotExist:
-                    pass
-
-            serializer.validated_data['score'] = score
-        except KeyError:
-            return Response({"selected_choices": ["Invalid data. Expected a list of dictionaries."]}, 
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        quiz_attempt = serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
 class QuizAttemptListView(generics.ListAPIView):
     serializer_class = QuizAttemptSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -108,12 +92,16 @@ class QuizAttemptListView(generics.ListAPIView):
 
 class QuizAttemptListView(generics.ListAPIView):
     serializer_class = QuizAttemptSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
 
     def get_queryset(self):
         return QuizAttempt.objects.filter(user=self.request.user)
 
 class QuizOverviewAPIView(generics.ListAPIView):
     serializer_class = QuizAnalyticsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
 
     def get_queryset(self):
         total_quizzes = Quiz.objects.count()
@@ -128,6 +116,8 @@ class QuizOverviewAPIView(generics.ListAPIView):
 
 class QuizPerformanceMetricsAPIView(generics.ListAPIView):
     serializer_class = QuizPerformanceMetricsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
 
     def get_queryset(self):
         return Quiz.objects.annotate(
@@ -138,6 +128,7 @@ class QuizPerformanceMetricsAPIView(generics.ListAPIView):
 
 class QuestionStatisticsAPIView(generics.ListAPIView):
     serializer_class = QuestionStatisticsSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         return Question.objects.annotate(total_answers=Count('choices__selectedchoice')).order_by('-total_answers')
@@ -152,6 +143,7 @@ class UserProfileView(generics.RetrieveAPIView):
 class ResultView(generics.RetrieveAPIView):
     queryset = QuizAttempt.objects.all()
     serializer_class = QuizAttemptResultSerializer
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -174,6 +166,7 @@ class UserRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
 
 class CombinedStatisticsAPIView(generics.ListAPIView):
     serializer_class = CombinedStatisticsSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         total_quizzes = Quiz.objects.count()

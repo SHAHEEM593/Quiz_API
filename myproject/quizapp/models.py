@@ -13,10 +13,18 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
+
 class Quiz(models.Model):
+    DIFFICULTY_CHOICES = [
+        ('easy', 'Easy'),
+        ('medium', 'Medium'),
+        ('hard', 'Hard'),
+    ]
+
     title = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    difficulty_level = models.CharField(max_length=10, choices=DIFFICULTY_CHOICES)
 
     def __str__(self):
         return self.title
