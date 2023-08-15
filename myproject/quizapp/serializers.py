@@ -2,7 +2,8 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from .models import Category, Question, Choice, Quiz, QuizAttempt, SelectedChoice
 from django.core.exceptions import ObjectDoesNotExist
-
+from django_filters import rest_framework as filters
+from .models import Quiz
 
 User = get_user_model()
 
@@ -208,8 +209,7 @@ class CombinedStatisticsSerializer(serializers.Serializer):
     quiz_performance_metrics = serializers.ListField(child=serializers.DictField())
     question_statistics = serializers.ListField(child=serializers.DictField())
 
-from django_filters import rest_framework as filters
-from .models import Quiz
+
 
 class QuizFilter(filters.FilterSet):
     topic = filters.CharFilter(field_name='category__name', lookup_expr='icontains')
